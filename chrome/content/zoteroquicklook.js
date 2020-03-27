@@ -5,6 +5,7 @@ Zotero.ZoteroQuickLook = {
 	initialized: false,
 	proc:null,
 	customviewcommand:null,
+    odrivepath:null,
     isBrowseMode:false,
     viewerExecutable:null,
     viewerBaseArguments:null,
@@ -22,6 +23,9 @@ Zotero.ZoteroQuickLook = {
 
 			//Trim the preference to avoid problems of extra spaces
 			this.customviewcommand = this.getPref('customviewcommand').replace(/^\s+|\s+$/g, '');
+
+            //odrive path
+            this.odrivepath = this.getPref('odrivepath');
 
 			//Check that the custom view command exists and show an alert if it does not.
 
@@ -56,7 +60,7 @@ Zotero.ZoteroQuickLook = {
 			//Zotero.ZoteroQuickLook.initIntegration();
 
 			Zotero.debug("ZoteroQuickLook: finished init",3);
-			
+
 			this.initialized = true;
 		}
 	},
@@ -74,7 +78,7 @@ Zotero.ZoteroQuickLook = {
 			Zotero.debug("ZoteroQuickLook: Copying Bridge.exe file to: " + path);
 			Zotero.ZoteroQuickLook.initExecutable(path);
 		}
-		
+
 		/*
 		// Check if the word processor integration for Zotero is installed and install the quicklook word processor script
 		// Disabled due to removal of script menu in Word 2016+
@@ -90,7 +94,7 @@ Zotero.ZoteroQuickLook = {
 				);
 				if (!zoteroQL.exists()){
 					Zotero.debug("ZoteroQuickLook: Did not find ZoteroQuickLook integration script, attempting to install.");
-					
+
 					let sourceScript = await this.copyURLToTempDir(scriptURL + "ZoteroQuickLook/coq.scpt");
 
 					Zotero.debug("ZoteroQuickLook: Compiling script. "
@@ -111,7 +115,7 @@ Zotero.ZoteroQuickLook = {
 							sourceScript
 						]
 					);
-					
+
 					await OS.File.remove(sourceScript);
 
 				}
@@ -181,7 +185,7 @@ Zotero.ZoteroQuickLook = {
 
 	initExecutable: function(scriptLocation) {
 		Zotero.debug("ZoteroQuickLook: Script location is " + scriptLocation, 3);
-		
+
 	//Initialize the command that is used.
 
 		//TODO: The script fails when custom view command is bogus.
@@ -235,9 +239,9 @@ Zotero.ZoteroQuickLook = {
 
 		}
 
-		else if(Zotero.isWin){			
+		else if(Zotero.isWin){
 			/* TODO: Checking for existence of Windows Store Apps isn't working
-			// Check if QuickLook is installed. 
+			// Check if QuickLook is installed.
 			localappdata = Components.classes["@mozilla.org/file/directory_service;1"].getService(Components.interfaces.nsIProperties).get("LocalAppData", Components.interfaces.nsIFile).path;
 			qlMsiLocation = Zotero.File.pathToFile(localappdata + "\\Programs\\QuickLook\\QuickLook.exe");
 			winApps = Components.classes["@mozilla.org/file/local;1"].createInstance(Components.interfaces.nsILocalFile).initWithPath("C:\\Program Files\\WindowsApps\\").directoryEntries;
@@ -254,9 +258,9 @@ Zotero.ZoteroQuickLook = {
 				return;
 			}
 			*/
-			
+
 			this.viewerExecutable = Zotero.File.pathToFile(scriptLocation);
-			this.viewerBaseArguments=[''];		
+			this.viewerBaseArguments=[''];
 		}
 	},
 
@@ -330,7 +334,7 @@ Checks the attachment file or writes a content of a note to a file and then push
 			if (item.attachmentLinkMode == Zotero.Attachments.LINK_MODE_LINKED_URL) {
 				return;
 			}
-			
+
 			let isLinkedFile = !item.isImportedAttachment();
 			let path = item.getFilePath();
 			if (!path) {
@@ -359,16 +363,41 @@ Checks the attachment file or writes a content of a note to a file and then push
 				if (await OS.File.exists(iCloudPath)) {
 					// Launching qlmanage should trigger an iCloud download
 					Zotero.debug("ZoteroQuickLook: Triggering download of iCloud file");
-					await args.push(Zotero.ZoteroQuickLook.cleanFileName(path));	
+					await args.push(Zotero.ZoteroQuickLook.cleanFileName(path));
 					return;
 				}
 			}
-			
+
+
+
+            // Try to download file with odrive
+            let odrivePath = path + '.cloud';
+			let odriveFileExists = await OS.File.exists(odrivePath);
+            if(Zotero.ZoteroQuickLook.odrivepath != "" && !fileExists && odriveFileExists && isLinkedFile) {
+                Zotero.debug("ZoteroQuickLook: downloading file with odrive: " + odrivePath);
+
+                // Prepare the call to the odrive client
+                let odriveArgs = ['sync', odrivePath];
+
+                Zotero.debug("ZoteroQuickLook: Path for odrive: " + odrivePath);
+
+                var odriveBin = Components.classes["@mozilla.org/file/local;1"]
+                             .createInstance(Components.interfaces.nsIFile);
+                odriveBin.initWithPath(Zotero.ZoteroQuickLook.odrivepath);
+
+                var odrive = Components.classes["@mozilla.org/process/util;1"]
+                             .createInstance(Components.interfaces.nsIProcess);
+                odrive.init(odriveBin);
+                odrive.runw(true, odriveArgs, odriveArgs.length);
+
+                fileExists = OS.File.exists(path);
+            }
+
 			if (fileExists) {
-				await args.push(Zotero.ZoteroQuickLook.cleanFileName(path));	
+				await args.push(Zotero.ZoteroQuickLook.cleanFileName(path));
 				return;
 			}
-			
+
 			if (isLinkedFile || !Zotero.Sync.Storage.Local.getEnabledForLibrary(item.libraryID)) {
 				this.showAttachmentNotFoundDialog(
 					itemID,
@@ -381,7 +410,7 @@ Checks the attachment file or writes a content of a note to a file and then push
 				);
 				return;
 			}
-			
+
 			try {
 				await Zotero.Sync.Runner.downloadFile(item);
 			}
@@ -391,7 +420,7 @@ Checks the attachment file or writes a content of a note to a file and then push
 				ZoteroPane_Local.syncAlert(e);
 				return;
 			}
-			
+
 			if (!await item.getFilePathAsync()) {
 				ZoteroPane_Local.showAttachmentNotFoundDialog(
 					item.id,
@@ -404,7 +433,7 @@ Checks the attachment file or writes a content of a note to a file and then push
 				return;
 			} else {
 				// Try previeviewing file after download
-				await args.push(Zotero.ZoteroQuickLook.cleanFileName(path));	
+				await args.push(Zotero.ZoteroQuickLook.cleanFileName(path));
 			}
 
 		}
@@ -462,7 +491,7 @@ Checks the attachment file or writes a content of a note to a file and then push
 		if (!Zotero.isWin || this.customviewcommand !== "") {
 
 		} else {
-			
+
 		}
 
 		// Combine all filenames into an array
@@ -507,14 +536,14 @@ Checks the attachment file or writes a content of a note to a file and then push
 
 
 		///If no files are specified, exit.
-		
+
 		if (! filesFound ) {
 			Zotero.debug("ZoteroQuickLook: thinks that no files are selected",3);
 			return false;
 		}
 
 		// Custom view commmand does not have base arguments but other view commands have one base argument.
-		
+
 		var argsString="";
 
 		for( i in args){
@@ -523,12 +552,12 @@ Checks the attachment file or writes a content of a note to a file and then push
 
 		var baseArgs = this.viewerBaseArguments.slice();
 		var baseArgsString="";
-		
+
 		for( i in baseArgs){
 			baseArgsString = baseArgsString+" "+baseArgs[i];
 		}
-		
-		// If no file arguments were added to the base arguments, exit. 
+
+		// If no file arguments were added to the base arguments, exit.
 		if (argsString == baseArgsString) {
 			Zotero.debug("ZoteroQuickLook: Only linked URLs are selected",3);
 			return false;
@@ -536,7 +565,7 @@ Checks the attachment file or writes a content of a note to a file and then push
 
 		//Write to debug what is called
 		Zotero.debug("ZoteroQuickLook: calling a shell command: " +this.viewerExecutable.path +argsString,3);
-		
+
 		Zotero.ZoteroQuickLook.proc = Components.classes["@mozilla.org/process/util;1"].
 		createInstance(Components.interfaces.nsIProcess);
 		Zotero.ZoteroQuickLook.proc.init(Zotero.ZoteroQuickLook.viewerExecutable);

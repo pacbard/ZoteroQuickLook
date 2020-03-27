@@ -1,4 +1,18 @@
-ZoteroQuickLook
+ZoteroQuickLook - Odrive Fork
+=============================
+
+This is a fork of the original [ZoteroQuicklook](https://github.com/mronkko/ZoteroQuickLook)
+plugin that is compatible with [odrive](https://odrive.com) sync.
+
+It tries to download the file being previewed using odrive if a cloud placeholder
+is present.
+
+To start using in, set the path to the odrive binary in the Zotero preferences.
+
+This is still an experimental fork that I only tested on macOS. Use at your own
+risk.
+
+Original README
 ===============
 
 This open source project implements QuickLook in Zotero.
